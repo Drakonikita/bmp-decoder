@@ -1,0 +1,8 @@
+# depslib dependency file v1.0
+1647275939 source:d:\gamedev\cpp\bmp-decoder\main.cpp
+	<iostream>
+	<fstream>
+	"bmp.h"
+
+1647183242 d:\gamedev\cpp\bmp-decoder\bmp.h
+

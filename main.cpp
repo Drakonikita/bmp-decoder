@@ -1,53 +1,203 @@
 #include <iostream>
 #include <fstream>
 
+#include "bmp.h"
 
-//http://math.ivanovo.ac.ru/dalgebra/Khashin/gr/bmp/bmp.html
+const char black = 64;
+const char white = 32;
 
-typedef unsigned __int16 WORD;
-
-typedef struct {
-      WORD   bfType;         // 0x4d42 | 0x4349 | 0x5450
-      int    bfSize;         // размер файла
-      int    bfReserved;     // 0
-      int    bfOffBits;      // смещение до поля данных,
-                             // обычно 54 = 16 + biSize
-      int    biSize;         // размер струкуры в байтах:
-                             // 40(BITMAPINFOHEADER) или 108(BITMAPV4HEADER)
-                             // или 124(BITMAPV5HEADER)
-      int    biWidth;        // ширина в точках
-      int    biHeight;       // высота в точках
-      WORD   biPlanes;       // всегда должно быть 1
-      WORD   biBitCount;     // 0 | 1 | 4 | 8 | 16 | 24 | 32
-      int    biCompression;  // BI_RGB | BI_RLE8 | BI_RLE4 |
-                             // BI_BITFIELDS | BI_JPEG | BI_PNG
-                             // реально используется лишь BI_RGB
-      int    biSizeImage;    // Количество байт в поле данных
-                             // Обычно устанавливается в 0
-      int    biXPelsPerMeter;// горизонтальное разрешение, точек на дюйм
-      int    biYPelsPerMeter;// вертикальное разрешение, точек на дюйм
-      int    biClrUsed;      // Количество используемых цветов
-                             // (если есть таблица цветов)
-      int    biClrImportant; // Количество существенных цветов.
-                             // Можно считать, просто 0
-} BMPheader;
-
-int main()
+int main()//int argc, char *argv[])
 {
-    std::string buf1;
-    std::ifstream fin1("1.bmp", std::ios::binary);
-    if (fin1.is_open())
+    /*if (argc < 2) {
+        std::cout << "Usage: " << argv[0] << " file_name" << std::endl;
+        return 0;
+    }*/
+
+    char *fileName = "2.bmp"; //argv[1];
+
+    // открываем файл
+    std::ifstream fileStream(fileName, std::ifstream::binary);
+    if (!fileStream) {
+        std::cout << "Error opening file '" << fileName << "'." << std::endl;
+        return 0;
+    }
+
+    // заголовк изображения
+    BITMAPFILEHEADER fileHeader;
+    read(fileStream, fileHeader.bfType, sizeof(fileHeader.bfType));
+    read(fileStream, fileHeader.bfSize, sizeof(fileHeader.bfSize));
+    read(fileStream, fileHeader.bfReserved1, sizeof(fileHeader.bfReserved1));
+    read(fileStream, fileHeader.bfReserved2, sizeof(fileHeader.bfReserved2));
+    read(fileStream, fileHeader.bfOffBits, sizeof(fileHeader.bfOffBits));
+
+    if (fileHeader.bfType != 0x4D42) {
+        std::cout << "Error: '" << fileName << "' is not BMP file." << std::endl;
+        return 0;
+    }
+
+    // информация изображения
+    BITMAPINFOHEADER fileInfoHeader;
+    read(fileStream, fileInfoHeader.biSize, sizeof(fileInfoHeader.biSize));
+
+    // bmp core
+    if (fileInfoHeader.biSize >= 12) {
+        read(fileStream, fileInfoHeader.biWidth, sizeof(fileInfoHeader.biWidth));
+        read(fileStream, fileInfoHeader.biHeight, sizeof(fileInfoHeader.biHeight));
+        read(fileStream, fileInfoHeader.biPlanes, sizeof(fileInfoHeader.biPlanes));
+        read(fileStream, fileInfoHeader.biBitCount, sizeof(fileInfoHeader.biBitCount));
+    }
+
+    // получаем информацию о битности
+    int colorsCount = fileInfoHeader.biBitCount >> 3;
+    if (colorsCount < 3) {
+        colorsCount = 3;
+    }
+
+    int bitsOnColor = fileInfoHeader.biBitCount / colorsCount;
+    int maskValue = (1 << bitsOnColor) - 1;
+
+    // bmp v1
+    if (fileInfoHeader.biSize >= 40) {
+        read(fileStream, fileInfoHeader.biCompression, sizeof(fileInfoHeader.biCompression));
+        read(fileStream, fileInfoHeader.biSizeImage, sizeof(fileInfoHeader.biSizeImage));
+        read(fileStream, fileInfoHeader.biXPelsPerMeter, sizeof(fileInfoHeader.biXPelsPerMeter));
+        read(fileStream, fileInfoHeader.biYPelsPerMeter, sizeof(fileInfoHeader.biYPelsPerMeter));
+        read(fileStream, fileInfoHeader.biClrUsed, sizeof(fileInfoHeader.biClrUsed));
+        read(fileStream, fileInfoHeader.biClrImportant, sizeof(fileInfoHeader.biClrImportant));
+    }
+
+    // bmp v2
+    fileInfoHeader.biRedMask = 0;
+    fileInfoHeader.biGreenMask = 0;
+    fileInfoHeader.biBlueMask = 0;
+
+    if (fileInfoHeader.biSize >= 52) {
+        read(fileStream, fileInfoHeader.biRedMask, sizeof(fileInfoHeader.biRedMask));
+        read(fileStream, fileInfoHeader.biGreenMask, sizeof(fileInfoHeader.biGreenMask));
+        read(fileStream, fileInfoHeader.biBlueMask, sizeof(fileInfoHeader.biBlueMask));
+    }
+
+    // если маска не задана, то ставим маску по умолчанию
+    if (fileInfoHeader.biRedMask == 0 || fileInfoHeader.biGreenMask == 0 || fileInfoHeader.biBlueMask == 0) {
+        fileInfoHeader.biRedMask = maskValue << (bitsOnColor * 2);
+        fileInfoHeader.biGreenMask = maskValue << bitsOnColor;
+        fileInfoHeader.biBlueMask = maskValue;
+    }
+
+    // bmp v3
+    if (fileInfoHeader.biSize >= 56) {
+        read(fileStream, fileInfoHeader.biAlphaMask, sizeof(fileInfoHeader.biAlphaMask));
+    } else {
+        fileInfoHeader.biAlphaMask = maskValue << (bitsOnColor * 3);
+    }
+
+    // bmp v4
+    if (fileInfoHeader.biSize >= 108) {
+        read(fileStream, fileInfoHeader.biCSType, sizeof(fileInfoHeader.biCSType));
+        read(fileStream, fileInfoHeader.biEndpoints, sizeof(fileInfoHeader.biEndpoints));
+        read(fileStream, fileInfoHeader.biGammaRed, sizeof(fileInfoHeader.biGammaRed));
+        read(fileStream, fileInfoHeader.biGammaGreen, sizeof(fileInfoHeader.biGammaGreen));
+        read(fileStream, fileInfoHeader.biGammaBlue, sizeof(fileInfoHeader.biGammaBlue));
+    }
+
+    // bmp v5
+    if (fileInfoHeader.biSize >= 124) {
+        read(fileStream, fileInfoHeader.biIntent, sizeof(fileInfoHeader.biIntent));
+        read(fileStream, fileInfoHeader.biProfileData, sizeof(fileInfoHeader.biProfileData));
+        read(fileStream, fileInfoHeader.biProfileSize, sizeof(fileInfoHeader.biProfileSize));
+        read(fileStream, fileInfoHeader.biReserved, sizeof(fileInfoHeader.biReserved));
+    }
+
+    // проверка на поддерку этой версии формата
+    if (fileInfoHeader.biSize != 12 && fileInfoHeader.biSize != 40 && fileInfoHeader.biSize != 52 &&
+        fileInfoHeader.biSize != 56 && fileInfoHeader.biSize != 108 && fileInfoHeader.biSize != 124) {
+        std::cout << "Error: Unsupported BMP format." << std::endl;
+        return 0;
+    }
+
+    if (fileInfoHeader.biBitCount != 16 && fileInfoHeader.biBitCount != 24 && fileInfoHeader.biBitCount != 32) {
+        std::cout << "Error: Unsupported BMP bit count." << std::endl;
+        return 0;
+    }
+
+    if (fileInfoHeader.biCompression != 0 && fileInfoHeader.biCompression != 3) {
+        std::cout << "Error: Unsupported BMP compression." << std::endl;
+        return 0;
+    }
+
+    // rgb info
+    RGBQUAD **rgbInfo = new RGBQUAD*[fileInfoHeader.biHeight];
+
+    for (unsigned int i = 0; i < fileInfoHeader.biHeight; i++) {
+        rgbInfo[i] = new RGBQUAD[fileInfoHeader.biWidth];
+    }
+
+    // определение размера отступа в конце каждой строки
+    int linePadding = ((fileInfoHeader.biWidth * (fileInfoHeader.biBitCount / 8)) % 4) & 3;
+
+    // чтение
+    unsigned int bufer;
+
+    for (int i = fileInfoHeader.biHeight-1; i >= 0 ; i--)
     {
-        while(!fin1.eof())
+        for (int j = fileInfoHeader.biWidth-1; j >= 0 ; j--)
         {
-            getline(fin1, buf1);
-            std::cout << buf1 << std::endl;
+            read(fileStream, bufer, fileInfoHeader.biBitCount / 8);
+
+            rgbInfo[i][j].rgbRed = bitextract(bufer, fileInfoHeader.biRedMask);
+            rgbInfo[i][j].rgbGreen = bitextract(bufer, fileInfoHeader.biGreenMask);
+            rgbInfo[i][j].rgbBlue = bitextract(bufer, fileInfoHeader.biBlueMask);
+            rgbInfo[i][j].rgbReserved = bitextract(bufer, fileInfoHeader.biAlphaMask);
+        }
+        fileStream.seekg(linePadding, std::ios_base::cur);
+    }
+
+
+    // вывод
+    char pixel[4];
+    for (unsigned int i = 0; i < fileInfoHeader.biHeight; i++) {
+        for (unsigned int j = 0; j < fileInfoHeader.biWidth; j++)
+        {
+                pixel[0] = rgbInfo[i][j].rgbRed;
+                pixel[1] = rgbInfo[i][j].rgbGreen;
+                pixel[2] = rgbInfo[i][j].rgbBlue;
+                pixel[3] = rgbInfo[i][j].rgbReserved;
+
+                if(pixel[0] == -1)
+                    std::cout << white;
+                else
+                    std::cout << black;
+
+
+           /* std::cout << std::hex
+                      << +rgbInfo[i][j].rgbRed << " "
+                      << +rgbInfo[i][j].rgbGreen << " "
+                      << +rgbInfo[i][j].rgbBlue << " "
+                      << +rgbInfo[i][j].rgbReserved
+                      << " ";*/
 
         }
-
+        std::cout << std::endl;
     }
-    fin1.close();
 
+    return 1;
+}
 
-    return 0;
+unsigned char bitextract(const unsigned int byte, const unsigned int mask) {
+    if (mask == 0) {
+        return 0;
+    }
+
+    // определение количества нулевых бит справа от маски
+    int
+        maskBufer = mask,
+        maskPadding = 0;
+
+    while (!(maskBufer & 1)) {
+        maskBufer >>= 1;
+        maskPadding++;
+    }
+
+    // применение маски и смещение
+    return (byte & mask) >> maskPadding;
 }
