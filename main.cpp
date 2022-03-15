@@ -133,14 +133,32 @@ int main()//int argc, char *argv[])
     }
 
     // определение размера отступа в конце каждой строки
-    int linePadding = ((fileInfoHeader.biWidth * (fileInfoHeader.biBitCount / 8)) % 4) & 3;
+    //int linePadding = ((fileInfoHeader.biWidth * (fileInfoHeader.biBitCount / 8)) % 4) & 3;
+    int linePadding = 0;
+    int ch = ((fileInfoHeader.biWidth * (fileInfoHeader.biBitCount / 8)) % 4);
+    switch(ch)
+    {
+    case 0:
+        linePadding = 0;
+        break;
+    case 1:
+        linePadding = 3;
+        break;
+    case 2:
+        linePadding = 2;
+        break;
+    case 3:
+        linePadding = 1;
+        break;
+    }
 
     // чтение
     unsigned int bufer;
 
     for (int i = fileInfoHeader.biHeight-1; i >= 0 ; i--)
     {
-        for (int j = fileInfoHeader.biWidth-1; j >= 0 ; j--)
+        //for (int j = fileInfoHeader.biWidth-1; j >= 0 ; j--)
+        for (int j = 0; j < fileInfoHeader.biWidth ; j++)
         {
             read(fileStream, bufer, fileInfoHeader.biBitCount / 8);
 
@@ -193,10 +211,11 @@ unsigned char bitextract(const unsigned int byte, const unsigned int mask) {
         maskBufer = mask,
         maskPadding = 0;
 
-    while (!(maskBufer & 1)) {
+    while (!(maskBufer & 1))
+        {
         maskBufer >>= 1;
         maskPadding++;
-    }
+        }
 
     // применение маски и смещение
     return (byte & mask) >> maskPadding;

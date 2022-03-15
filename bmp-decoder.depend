@@ -6,3 +6,10 @@
 
 1647183242 d:\gamedev\cpp\bmp-decoder\bmp.h
 
+1647355503 source:c:\gd\cpp\bmp-decoder\main.cpp
+	<iostream>
+	<fstream>
+	"bmp.h"
+
+1647351735 c:\gd\cpp\bmp-decoder\bmp.h
+
